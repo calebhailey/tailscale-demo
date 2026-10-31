@@ -1,0 +1,21 @@
+[Unit]
+Description=Tailscale demonstration application
+Documentation=https://github.com/calebhailey
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=tailscale-demo-app
+Group=tailscale-demo-app
+ExecStart=/usr/local/bin/tailscale-demo-app --host 0.0.0.0 --port 8080
+Restart=on-failure
+RestartSec=2s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/tmp
+
+[Install]
+WantedBy=multi-user.target

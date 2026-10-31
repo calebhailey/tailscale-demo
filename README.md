@@ -7,6 +7,8 @@
   * [AWS Account](#aws-account)
   * [Identity Federation](#identity-federation)
 * [Local Development](#local-development)
+  * [Demo app](#demo-app)
+  * [Local VMs](#local-vms)
 * [Plan](#roadmap)
 
 ## Overview
@@ -51,14 +53,15 @@ References to Linux commands and/or packages are Debian-based Linux distribution
 
     This demo requires the following CLI tools: 
 
-    * `curl` (built-in on MacOS, available via the `curl` package on Linux)
-    * `openssh` (built-in on MacOS, available via the `openssh-client` package on Linux)
+    * `curl` (built-in on macOS, available via the `curl` package on Linux)
+    * `openssh` (built-in on macOS, available via the `openssh-client` package on Linux)
     * `jq` ([`jq` downloads])
     * `aws` CLI (see [AWS Account](#aws-account) prerequisites, below)
 
     Optional local development tools:
 
     * `go` for building the demo app
+
     * `podman` + `podman-compose` for local development ([Podman Installation])
     
       > **NOTE:** podman-compose requires `python3` and `pip3`; install it with:
@@ -68,6 +71,11 @@ References to Linux commands and/or packages are Debian-based Linux distribution
       > ```
 
     * Docker Desktop (includes Docker engine, CLI, and `docker-compose`) as local development alternative to `podman` ([Docker Desktop Installation])
+
+    * `tart` for local VM builds ([Tart Quickstart])
+
+      > **NOTE:** this demo uses [Tart] as a [Packer builder] on macOS. 
+      > For alternative build plugins, visit the [Packer Integrations directory].
 
 1.  **Generate an SSH key**
 
@@ -221,6 +229,9 @@ Next let's configure passwordless AWS-to-Tailnet workload identity.
 
 ## Local development
 
+### Demo App
+------------
+
 This project contains a sample application that serves a simple static HTML website and HTTP API.
 
 1.  **Run the sample app**
@@ -308,6 +319,55 @@ This project contains a sample application that serves a simple static HTML webs
 
     _NOTE: for Docker Desktop environments, `docker compose down -v`._
 
+### Local VMs
+-------------
+
+Use [Packer] and [Tart] to build local ARM64 Debian images.
+The local images exercise the same provisioning steps that will later produce the AWS AMIs.
+
+> For alternatives to Tart, see the [Packer builders overview] and the [Packer builder integrations].
+
+1.  Build the Linux ARM64 application binary:
+
+    ```shell
+    mkdir -p dist
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
+        -C app \
+        -buildvcs=false \
+        -trimpath \
+        -ldflags='-s -w' \
+        -o ../dist/tailscale-demo-app .
+    ```
+
+2.  Initialize, format-check, and validate the Packer templates:
+
+    ```shell
+    cd packer
+    packer init .
+    packer fmt -check *.pkr.hcl
+    packer validate .
+    ```
+
+3.  Build the local router and application images:
+
+    ```shell
+    packer build -only=router.tart-cli.router .
+    packer build -only=app.tart-cli.app .
+    ```
+
+    Use the `tart list` command to list the resulting VM images:
+
+    ```shell
+    $ tart list
+    Source Name                                                                                              Disk  Size Accessed      State
+    local  debian                                                                                            20 GB 2 GB 1 day ago     stopped
+    local  tailscale-demo-app-local                                                                          20 GB 2 GB 3 hours ago   stopped
+    local  tailscale-demo-router-local                                                                       20 GB 1 GB 2 minutes ago stopped
+    OCI    ghcr.io/cirruslabs/debian:latest                                                                  20 GB 2 GB 1 day ago     stopped
+    OCI    ghcr.io/cirruslabs/debian@sha256:26d5e519b5f25ed7e165cc2e138695a3541b0b7e53f267bb63bb08a49588bdfa 20 GB 2 GB 2 minutes ago stoppe
+    ```
+
+    Inspect either one with `tart run <image>`.
 
 ## Roadmap
 ----------
@@ -382,8 +442,14 @@ This project contains a sample application that serves a simple static HTML webs
 [ElastiCache]: https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/WhatIs.html
 [Getting started with the AWS CLI]: https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html
 [Packer]: https://www.hashicorp.com/en/products/packer
+[Packer builder integrations]: https://developer.hashicorp.com/packer/integrations?components=builder
+[Packer Integrations directory]: https://developer.hashicorp.com/packer/integrations?components=builder
+[Packer builder]: https://developer.hashicorp.com/packer/docs/builders
+[Packer builders overview]: https://developer.hashicorp.com/packer/docs/builders
 [Podman installation]: https://podman.io/docs/installation
 [Sign up for AWS (advanced)]: https://docs.aws.amazon.com/accounts/latest/reference/getting-started.html
+[Tart]: https://tart.run
+[Tart Quickstart]: https://tart.run/quick-start/
 [tailnet]: https://tailscale.com/docs/concepts/tailnet
 [Tailscale Console]: https://console.tailscale.com/admin/
 [Tailscale quickstart]: https://tailscale.com/docs/how-to/quickstart

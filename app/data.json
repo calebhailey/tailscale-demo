@@ -1,0 +1,14 @@
+{
+    "kind": "App",
+    "version": "v1",
+    "metadata": {
+        "namespace": "default",
+        "name": "Tailscale",
+        "labels": {
+            "version": "0.1.0",
+            "copyright": "2026"
+        },
+        "annotations": {}
+    },
+    "spec": {}
+}

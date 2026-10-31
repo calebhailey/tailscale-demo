@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>Demo server</title>
+        <link rel='stylesheet' href='/css/styles.css'>
+    </head>
+    <body>
+        <header>
+            <nav>
+                <menu></menu>
+            </nav>
+        </header>
+        <main>
+            <section>
+                <h1>Hello, {{ or (get "user.metadata.name") "demo" }} world!</h1>
+                <p>This app is running on {{ .Environment.Hostname }} (<code>{{ .Environment.OS }}/{{ .Environment.Architecture }}</code>).</p>
+                <p>Status: {{ .Status.State }}</p>
+            </section>
+        </main>
+        <footer>
+            <nav>
+                <menu></menu>
+            </nav>
+            <div>
+                <span>&copy; Caleb Hailey, {{ or (get "user.metadata.labels.copyright") "2026" }}</span>
+                <span>v{{ or (get "user.metadata.labels.version") "0" }}</span>
+            </div>
+        </footer>
+    </body>
+</html>

@@ -1,0 +1,66 @@
+:root {
+    --container-width: 720px;
+    --container-gutter: calc(calc(100vw - var(--container-width)) / 2);
+    --gutter-1x: 8px;
+    --gutter-2x: calc(var(--gutter-1x) * 2);
+    --gutter-3x: calc(var(--gutter-1x) * 3);
+    --gutter-4x: calc(var(--gutter-1x) * 4);
+    --whitespace: 50px;
+    --system-ui-fonts: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+* {
+    margin: 0;
+    padding: 0;
+    text-size-adjust: none;
+}
+
+html {
+    overflow-x: clip;
+    color-scheme: light dark;
+    font-family: var(--system-ui-fonts);
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    min-height: 100dvh;
+    scroll-behavior: smooth;
+}
+
+header, main :is(section, article), footer { 
+    padding: var(--whitespace) var(--container-gutter);
+}
+
+main { flex-grow: 1; }
+
+footer {
+    color: rgba(255,255,255,0.5);
+    background-color: black; 
+}
+
+footer div {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+}
+
+:is(h1, h2, h3, h4, h5, h6) { 
+    margin: 0 0 var(--gutter-2x);
+}
+
+:where(p, li):not(:last-child) { margin-bottom: var(--gutter-1x); }
+
+:where(a) { color: inherit; }
+
+svg { fill: currentColor; }
+
+@media screen and (max-width: 768px) {
+    :root {
+        --container-width: 90vw;
+        --container-gutter: 5vw;
+    }
+}

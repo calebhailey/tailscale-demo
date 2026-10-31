@@ -3,6 +3,9 @@
 * [Overview](#overview)
 * [Prerequisites](#prerequisites)
   * [Workstation](#workstation)
+  * [Tailscale Account](#tailscale-account)
+  * [AWS Account](#aws-account)
+  * [Identity Federation](#identity-federation)
 * [Local Development](#local-development)
 * [Plan](#roadmap)
 
@@ -19,6 +22,31 @@ The demo will focus on the benefits of ["gradual deployment"], as well as the ["
 This demo and related instructions have been tested exclusively on macOS, but all of the tools should work the same on Linux (and they are available on Windows with some minor adjustments to the documented commands).
 References to Linux commands and/or packages are Debian-based Linux distributions. 
 
+1.  **Tailscale**
+
+    This demo requires a free Tailscale account and a workstation with Tailscale installed.
+    Please visit the [Tailscale quickstart] to learn more.
+
+    To verify `tailscale` CLI installation, open Tailscale Settings and find "CLI Integration":
+
+    ![](docs/img/cli-setup-1.png)
+
+    Tap "Show me how" to view the CLI Integration view:
+
+    ![](docs/img/cli-setup-2.png)
+
+    Tap "Add now" to install the `tailscale` CLI on your `$PATH`:
+
+    ![](docs/img/cli-setup-3.png)
+
+    Verify the `tailscale` CLI is installed by running the `tailscale status` command:
+
+    ```shell
+    $ tailscale status
+    100.101.102.103  hello.ts.net                       hello@        linux  -
+    100.xx.xx.xx     workstation                        username@     macOS  -
+    ```
+
 1.  **CLI tools**
 
     This demo requires the following CLI tools: 
@@ -26,6 +54,7 @@ References to Linux commands and/or packages are Debian-based Linux distribution
     * `curl` (built-in on MacOS, available via the `curl` package on Linux)
     * `openssh` (built-in on MacOS, available via the `openssh-client` package on Linux)
     * `jq` ([`jq` downloads])
+    * `aws` CLI (see [AWS Account](#aws-account) prerequisites, below)
 
     Optional local development tools:
 
@@ -40,6 +69,155 @@ References to Linux commands and/or packages are Debian-based Linux distribution
 
     * Docker Desktop (includes Docker engine, CLI, and `docker-compose`) as local development alternative to `podman` ([Docker Desktop Installation])
 
+1.  **Generate an SSH key**
+
+    We will use SSH keys to demonstrate conventional OpenSSH connectivity. 
+
+    ```bash
+    ssh-keygen -t ed25519 -f ~/.ssh/tailscale-demo -C "tailscale-demo"
+    ```
+
+### Tailscale Account
+---------------------
+
+Sign in to your Tailscale account, and configure the tailnet policies we'll use for the demo. Define tags for the router and application nodes, allow Tailscale SSH to the router tag, and auto-approve the VPC subnet route advertised by router-tagged instances.
+
+1.  **Create Tailscale Tags**
+
+    Add Tailscale Tags for `tailscale-demo-router` and `tailscale-demo-app` nodes.
+
+    Use the Tailscale Console → Access Controls → Definitions → [Tags](https://console.tailscale.com/admin/acls/visual/tags) view, or edit your tailnet `"tagOwners"` policy to include:
+
+    ```json
+    "tagOwners": {
+      "tag:tailscale-demo-router": ["you@example.com"],
+      "tag:tailscale-demo-app": ["you@example.com"]
+    }
+    ```
+
+2.  **Add Tailscale SSH policy**
+
+    Allow Tailscale SSH for `tag:tailscale-demo-router` destinations.
+
+    Use the Tailscale Console → Access Controls → Policies → [Tailscale SSH](https://console.tailscale.com/admin/acls/visual/tailscale-ssh) view, or edit your tailnet `"ssh"` policy to include:
+
+    ```json
+    "ssh": [
+      {
+        "src": ["you@example.com"],
+        "dst": ["tag:tailscale-demo-router"],
+        "users": ["autogroup:nonroot"],
+        "action": "accept"
+      }
+    ],
+    ```
+
+    _NOTE: if the user’s Tailnet has restrictive general grants/ACLs, they must also permit network access to the router tag and 10.0.42.0/24. The SSH rule alone governs SSH authorization, not necessarily broader network reachability._
+
+3.  **Add Auto Approvers policy**
+
+    Auto approve the `10.0.42.0/24` VPC subnet route that will be advertised by demo router instances tagged `tag:tailscale-demo-router`.
+
+    Use the Tailscale Console → Access Controls → Policies → [Auto Approvers](https://console.tailscale.com/admin/acls/visual/auto-approvers) view, or edit your tailnet `"autoApprovers"` policy to include:
+
+    ```json
+    "autoApprovers": {
+       "routes": {
+         "10.0.42.0/24": ["tag:tailscale-demo-router"]
+       }
+     }
+    ```
+
+### AWS Account
+---------------
+
+This demo requires an [Amazon Web Services] account with advanced features enabled. 
+Use an existing account or follow these steps to create a new one.
+
+1.  **Create an AWS account**
+
+    Follow the instructions as [Sign up for AWS (advanced)] to create a new AWS account.
+
+2.  **Secure administrative access**
+
+    Enable root-user MFA, then follow [Create an IAM user] to create an administrative IAM user and attach the AWS managed [AdministratorAccess] policy.
+
+3.  **Install and configure the AWS CLI**
+
+    Follow [Getting started with the AWS CLI] to install the CLI and configure it with non-root credentials.
+
+4.  **Verify access to the VPC API**
+
+    ```shell
+    aws ec2 describe-vpcs \
+            --region us-east-2 \
+            --filters Name=isDefault,Values=true \
+            --query 'Vpcs[0].VpcId' \
+            --output text
+    ```
+
+### Identity Federation
+-----------------------
+
+Next let's configure passwordless AWS-to-Tailnet workload identity.
+
+1.  **Enable [AWS Outbound Identity Federation]**
+
+    ```shell
+    $ aws iam enable-outbound-web-identity-federation
+    {
+        "IssuerIdentifier": "https://xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.tokens.sts.global.api.aws"
+    }
+    ```
+
+    _NOTE: if you get an "already enabled" error, run `aws iam get-outbound-web-identity-federation-info` to get the already-configured OIDC issuer URL.
+
+2.  **Create two Tailscale OIDC Trust Credentials**
+
+    Add one Tailscale Trust Credential per IAM Role:
+
+    ```
+    arn:aws:iam::<ACCOUNT_ID>:role/tailscale-demo-router
+    arn:aws:iam::<ACCOUNT_ID>:role/tailscale-demo-app
+    ```
+
+    Use the Tailscale Console → Settings → [Trust Credentials](https://console.tailscale.com/admin/settings/trust-credentials) view and add credentials with the following settings:
+
+    * Select "OpenID Connect" to setup a trust relationship with AWS
+
+    * Give the trust relationship a name (e.g. `aws-tailscale-demo-router` or `aws-tailscale-demo-app`)
+
+    * Provide your AWS Outbound Identity Federation issuer URL from step 1, above
+
+      ```
+      https://xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.tokens.sts.global.api.aws
+      ```
+    
+    * Provide an AWS IAM Role ARN as the trust credential subject; e.g.:
+
+      ```
+      arn:aws:iam::<ACCOUNT_ID>:role/tailscale-demo-router
+      ```
+
+      > Use the `aws` CLI to obtain your AWS account ID
+      >
+      > ```shell
+      > $ aws sts get-caller-identity --query Account --output text
+      > ```
+
+    * Select "Continue"
+
+    * Select the "Keys" section, enable the "Auth Keys" **write permission**, and select the corresponding tag you created, above
+
+      ```
+      tag:tailscale-demo-router
+      ```
+
+    * Select "Generate Credential"
+
+    * Record the provided client ID and audience configuration values.
+
+    Repeat these steps to create a trust relationship for the app instances.
 
 ## Local development
 
@@ -140,7 +318,7 @@ This project contains a sample application that serves a simple static HTML webs
     * static HTML server w/ embedded "hello world" content that displays host metadata (e.g. hostname or instance ID)
     * minimal HTTP/JSON api endpoints for demo (/api/healthz + /api/readyz)
 
-2.  **Document workstation prerequisites**
+2.  **Document workstation prerequisites** ✅
 
     * `tailscale`
     * `aws`
@@ -149,13 +327,9 @@ This project contains a sample application that serves a simple static HTML webs
     * `jq`
     * ssh key(s)
 
-3.  **Document tailscale account prerequisites (manual)**
+3.  **Document tailscale account prerequisites (manual)** ✅
 
-    <!-- TODO -->
-
-4.  **Document AWS account prerequisites (manual)**
-
-    <!-- TODO -->
+4.  **Document AWS account prerequisites (manual)** ✅
 
 5.  **[Packer] build AMIs w/ custom app binary**
 
@@ -187,26 +361,34 @@ This project contains a sample application that serves a simple static HTML webs
 
 8.  **Stretch goals**
 
-    * setup [AWS Outbound Identity Federation] w/ [Tailscale Trust Credentials]?
-      TBD if Trust Credentials are available in Tailscale free tier? 🤔 🙏🏽
+    * setup [AWS Outbound Identity Federation] w/ [Tailscale Trust Credentials] ✅
     * add functional Valkey integration in the demo app? 
     * add [`tsnet`] to the demo app?
     * add AWS EKS w/ tailscale operator? 
 
 <!-- Links -->
-[AWS Outbound Identity Federation]: https://aws.amazon.com/identity/federation/outbound-federation/
-[Tailscale Subnet Routers]: https://tailscale.com/docs/features/subnet-routers
-[Tailscale Trust Credentials]: https://tailscale.com/docs/reference/trust-credentials
-[Packer]: https://www.hashicorp.com/en/products/packer
-[Terraform]: https://www.hashicorp.com/en/products/terraform
 ["gradual deployment"]: https://tailscale.com/docs/features/subnet-routers#benefits
 ["managed services access"]: https://tailscale.com/docs/features/subnet-routers#use-cases
+[`jq` downloads]: https://jqlang.org/download/
 [`tsnet`]: https://tailscale.com/docs/features/tsnet
-[VPC]: https://docs.aws.amazon.com/vpc/latest/userguide/what-is-amazon-vpc.html
 [ALB]: https://docs.aws.amazon.com/elasticloadbalancing/latest/application/introduction.html
+[Amazon Web Services]: https://aws.amazon.com
 [ASG]: https://docs.aws.amazon.com/autoscaling/ec2/userguide/what-is-amazon-ec2-auto-scaling.html
+[AWS Outbound Identity Federation]: https://aws.amazon.com/identity/federation/outbound-federation/
+[AdministratorAccess]: https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AdministratorAccess.html
+[Create an IAM user]: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_users_create.html
+[Docker Desktop installation]: https://docs.docker.com/desktop/
 [EC2]: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/concepts.html
 [ElastiCache]: https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/WhatIs.html
+[Getting started with the AWS CLI]: https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html
+[Packer]: https://www.hashicorp.com/en/products/packer
 [Podman installation]: https://podman.io/docs/installation
-[Docker Desktop installation]: https://docs.docker.com/desktop/
-[`jq` downloads]: https://jqlang.org/download/
+[Sign up for AWS (advanced)]: https://docs.aws.amazon.com/accounts/latest/reference/getting-started.html
+[tailnet]: https://tailscale.com/docs/concepts/tailnet
+[Tailscale Console]: https://console.tailscale.com/admin/
+[Tailscale quickstart]: https://tailscale.com/docs/how-to/quickstart
+[Tailscale Subnet Routers]: https://tailscale.com/docs/features/subnet-routers
+[Tailscale tag definitions]: https://tailscale.com/docs/features/tags
+[Tailscale Trust Credentials]: https://tailscale.com/docs/reference/trust-credentials
+[Terraform]: https://www.hashicorp.com/en/products/terraform
+[VPC]: https://docs.aws.amazon.com/vpc/latest/userguide/what-is-amazon-vpc.html

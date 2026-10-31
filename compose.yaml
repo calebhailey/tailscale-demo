@@ -1,0 +1,44 @@
+services:
+  # load balancer
+  proxy:
+    image: docker.io/library/haproxy:3.1-alpine
+    ports: ["8080:8080"]
+    volumes:
+      - ./containers/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/haproxy/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+
+  # demo app
+  app:
+    build:
+      context: .
+      dockerfile: containers/app.Containerfile
+    command: ["--host", "0.0.0.0", "--port", "8080", "--data", "data.json"]
+    volumes:
+      - ./app/data.json:/app/data.json:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "2", "http://127.0.0.1:8080/api/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    deploy:
+      mode: replicated
+      replicas: 3
+
+  # valkey
+  valkey:
+    image: docker.io/valkey/valkey:8-alpine
+    command: ["valkey-server", "/etc/valkey/valkey.conf"]
+    volumes:
+      - ./containers/valkey.conf:/etc/valkey/valkey.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping | grep -q PONG"]
+      interval: 2s
+      timeout: 2s
+      retries: 10

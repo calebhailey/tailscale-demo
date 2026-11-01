@@ -2,15 +2,20 @@
 #
 # Local build (macOS/tart):
 #   packer build -only=app.tart-cli.app .
+#
+# AWS AMI build:
+#   packer build -only=app.amazon-ebs.app -var aws_region=us-east-2 .
 
 build {
   name = "app"
   sources = [
     "source.tart-cli.app",
+    "source.amazon-ebs.app",
   ]
 
   provisioner "shell" {
-    script = "scripts/install-base.sh"
+    script           = "scripts/install-base.sh"
+    environment_vars = ["INSTALL_TAILSCALE=${var.install_tailscale}"]
   }
 
   provisioner "file" {
@@ -54,13 +59,20 @@ build {
   }
 
   provisioner "shell" {
-    inline_shebang = "/bin/bash -e"
+    environment_vars = ["INSTALL_TAILSCALE=${var.install_tailscale}"]
+    inline_shebang   = "/bin/bash -e"
     inline = [<<-SCRIPT
       set -o pipefail
 
-      command -v tailscale
-      test -x /usr/sbin/tailscaled
-      systemctl is-enabled tailscaled.service
+      if [[ "$INSTALL_TAILSCALE" == "true" ]]; then
+        command -v tailscale
+        test -x /usr/sbin/tailscaled
+        systemctl is-enabled tailscaled.service
+      else
+        ! command -v tailscale
+        ! test -e /usr/sbin/tailscaled
+        ! systemctl is-enabled tailscaled.service
+      fi
       systemctl is-enabled ssh.service
       systemctl is-enabled tailscale-demo-app.service
       test -x /usr/local/bin/tailscale-demo-app
@@ -73,7 +85,6 @@ build {
     ]
   }
 }
-
 # Local development (macOS)
 source "tart-cli" "app" {
   vm_base_name = "ghcr.io/cirruslabs/debian:latest"
@@ -87,4 +98,35 @@ source "tart-cli" "app" {
   ssh_username = "admin"
   ssh_password = "admin"
   ssh_timeout  = "5m"
+}
+
+# Production (AWS EBS)
+source "amazon-ebs" "app" {
+  region                 = var.aws_region
+  skip_region_validation = true
+  ssh_username           = var.aws_ssh_username
+  instance_type          = var.aws_instance_type
+
+  source_ami_filter {
+    filters = {
+      architecture        = "arm64"
+      name                = "debian-${var.debian_release}-arm64-*"
+      root-device-type    = "ebs"
+      virtualization-type = "hvm"
+    }
+    most_recent = true
+    owners      = ["136693071363"]
+  }
+
+  ami_name        = "tailscale-demo-app-${var.app_version}-{{timestamp}}"
+  ami_description = "Debian application base image for the Tailscale FDE demo"
+  encrypt_boot    = true
+
+  tags = {
+    Name         = "tailscale-demo-app"
+    Role         = "app"
+    Architecture = "arm64"
+    ManagedBy    = "packer"
+    AppVersion   = var.app_version
+  }
 }

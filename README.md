@@ -1,20 +1,21 @@
 # Tailscale Forward Deployed Engineer Demo
 
-* [Overview](#overview)
+## Overview
+
+This demo highlights the value proposition of the Tailscale platform, specifically including [Tailscale Subnet Routers].
+The demo will focus on the benefits of ["gradual deployment"], as well as the ["managed services access"] use case.
+
 * [Prerequisites](#prerequisites)
   * [Workstation](#workstation)
   * [Tailscale Account](#tailscale-account)
   * [AWS Account](#aws-account)
   * [Identity Federation](#identity-federation)
+* [Setup](#setup)
+  * [Packer](#packer)
 * [Local Development](#local-development)
   * [Demo app](#demo-app)
   * [Local VMs](#local-vms)
 * [Plan](#roadmap)
-
-## Overview
-
-Build a Tailscale demo that highlights the value proposition of the Tailscale platform, specifically including [Tailscale Subnet Routers]. 
-The demo will focus on the benefits of ["gradual deployment"], as well as the ["managed services access"] use case. 
 
 ## Prerequisites
 
@@ -22,7 +23,7 @@ The demo will focus on the benefits of ["gradual deployment"], as well as the ["
 ---------------
 
 This demo and related instructions have been tested exclusively on macOS, but all of the tools should work the same on Linux (and they are available on Windows with some minor adjustments to the documented commands).
-References to Linux commands and/or packages are Debian-based Linux distributions. 
+References to Linux commands and/or packages are Debian-based Linux distributions.
 
 1.  **Tailscale**
 
@@ -51,19 +52,20 @@ References to Linux commands and/or packages are Debian-based Linux distribution
 
 1.  **CLI tools**
 
-    This demo requires the following CLI tools: 
+    This demo requires the following CLI tools:
 
     * `curl` (built-in on macOS, available via the `curl` package on Linux)
     * `openssh` (built-in on macOS, available via the `openssh-client` package on Linux)
     * `jq` ([`jq` downloads])
     * `aws` CLI (see [AWS Account](#aws-account) prerequisites, below)
+    * `packer` CLI (see [Install Packer])
 
     Optional local development tools:
 
     * `go` for building the demo app
 
     * `podman` + `podman-compose` for local development ([Podman Installation])
-    
+
       > **NOTE:** podman-compose requires `python3` and `pip3`; install it with:
       >
       > ```
@@ -74,12 +76,12 @@ References to Linux commands and/or packages are Debian-based Linux distribution
 
     * `tart` for local VM builds ([Tart Quickstart])
 
-      > **NOTE:** this demo uses [Tart] as a [Packer builder] on macOS. 
+      > **NOTE:** this demo uses [Tart] as a [Packer builder] on macOS.
       > For alternative build plugins, visit the [Packer Integrations directory].
 
 1.  **Generate an SSH key**
 
-    We will use SSH keys to demonstrate conventional OpenSSH connectivity. 
+    We will use SSH keys to demonstrate conventional OpenSSH connectivity.
 
     ```bash
     ssh-keygen -t ed25519 -f ~/.ssh/tailscale-demo -C "tailscale-demo"
@@ -139,7 +141,7 @@ Sign in to your Tailscale account, and configure the tailnet policies we'll use 
 ### AWS Account
 ---------------
 
-This demo requires an [Amazon Web Services] account with advanced features enabled. 
+This demo requires an [Amazon Web Services] account with advanced features enabled.
 Use an existing account or follow these steps to create a new one.
 
 1.  **Create an AWS account**
@@ -200,7 +202,7 @@ Next let's configure passwordless AWS-to-Tailnet workload identity.
       ```
       https://xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.tokens.sts.global.api.aws
       ```
-    
+
     * Provide an AWS IAM Role ARN as the trust credential subject; e.g.:
 
       ```
@@ -227,6 +229,298 @@ Next let's configure passwordless AWS-to-Tailnet workload identity.
 
     Repeat these steps to create a trust relationship for the app instances.
 
+## Setup
+
+### Packer
+----------
+
+1.  **Configure `aws` profile**
+
+    ```shell
+    $ aws configure --profile tailscale-demo
+    AWS Access Key ID [****************demo]:
+    AWS Secret Access Key [****************tity]:
+    Default region name [us-east-2]:
+    Default output format [json]:
+    $ export AWS_PROFILE=tailscale-demo
+    ```
+
+1.  **Build the demo app for Linux/ARM64**
+
+    ```shell
+    mkdir -p dist
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
+      -C app \
+      -buildvcs=false \
+      -trimpath \
+      -ldflags='-s -w' \
+      -o ../dist/tailscale-demo-app .
+    ```
+
+1.  **Initialize and validate Packer**
+
+    ```shell
+    $ cd packer
+    $ packer init .
+    $ packer fmt -check *.pkr.hcl
+    $ packer validate .
+    The configuration is valid.
+    ```
+
+1.  **Build the router AMI**
+
+    ```shell
+    $ packer build \
+             -only=router.amazon-ebs.router \
+             -var 'aws_region=us-east-2' \
+             -var 'app_version=v1' \
+             .
+    ```
+
+    <details>
+    <summary><strong>Example output</strong></summary>
+
+    ```text
+    router.amazon-ebs.router: output will be in this color.
+
+    ==> router.amazon-ebs.router: Prevalidating any provided VPC information
+    ==> router.amazon-ebs.router: Prevalidating AMI Name: tailscale-demo-router-v1-1793489380
+    ==> router.amazon-ebs.router: Found Image ID: ami-01d768183e68d1b82
+    ==> router.amazon-ebs.router: Creating temporary keypair: packer_6ae679e4-e2e3-039a-8767-c3f5b0fe768d
+    ==> router.amazon-ebs.router: Creating temporary security group for this instance: packer_6ae679e8-f827-e3c0-06ec-02f5a295f21b
+    ==> router.amazon-ebs.router: Authorizing access to port 22 from [0.0.0.0/0] in the temporary security groups...
+    ==> router.amazon-ebs.router: Launching a source AWS instance...
+    ==> router.amazon-ebs.router: Instance ID: i-0c944f2bcf7f6e91f
+    ==> router.amazon-ebs.router: Waiting for instance (i-0c944f2bcf7f6e91f) to become ready...
+    ==> router.amazon-ebs.router: Using SSH communicator to connect: 3.12.155.32
+    ==> router.amazon-ebs.router: Waiting for SSH to become available...
+    ==> router.amazon-ebs.router: Connected to SSH!
+    ==> router.amazon-ebs.router: Provisioning with shell script: scripts/install-base.sh
+
+    ...
+
+    ==> router.amazon-ebs.router: Stopping the source instance...
+    ==> router.amazon-ebs.router: Stopping instance
+    ==> router.amazon-ebs.router: Waiting for the instance to stop...
+    ==> router.amazon-ebs.router: Creating AMI WFmuEdS from instance i-0c944f2bcf7f6e91f
+    ==> router.amazon-ebs.router: Attaching run tags to AMI...
+    ==> router.amazon-ebs.router: AMI: ami-0e0715192d1b866e4
+    ==> router.amazon-ebs.router: Waiting for AMI to become ready...
+    ==> router.amazon-ebs.router: Copying/Encrypting AMI (ami-0e0715192d1b866e4) to other regions...
+    ==> router.amazon-ebs.router: Copying to: us-east-2
+    ==> router.amazon-ebs.router: Waiting for all copies to complete...
+    ==> router.amazon-ebs.router: Skipping Enable AMI deprecation...
+    ==> router.amazon-ebs.router: Skipping Enable AMI deregistration protection...
+    ==> router.amazon-ebs.router: Modifying attributes on AMI (ami-0ebaf8746695b9726)...
+    ==> router.amazon-ebs.router: Modifying: description
+    ==> router.amazon-ebs.router: Modifying attributes on snapshot (snap-0b0ddd30566b0476d)...
+    ==> router.amazon-ebs.router: Adding tags to AMI (ami-0ebaf8746695b9726)...
+    ==> router.amazon-ebs.router: Tagging snapshot: snap-0b0ddd30566b0476d
+    ==> router.amazon-ebs.router: Creating AMI tags
+    ==> router.amazon-ebs.router: Adding tag: "Name": "tailscale-demo-router"
+    ==> router.amazon-ebs.router: Adding tag: "Role": "subnet-router"
+    ==> router.amazon-ebs.router: Adding tag: "AppVersion": "v1"
+    ==> router.amazon-ebs.router: Adding tag: "Architecture": "arm64"
+    ==> router.amazon-ebs.router: Adding tag: "ManagedBy": "packer"
+    ==> router.amazon-ebs.router: Creating snapshot tags
+    ==> router.amazon-ebs.router: Deregistering the AMI and deleting unencrypted temporary AMIs and snapshots
+    ==> router.amazon-ebs.router: Terminating the source AWS instance...
+    ==> router.amazon-ebs.router: Cleaning up any extra volumes...
+    ==> router.amazon-ebs.router: No volumes to clean up, skipping
+    ==> router.amazon-ebs.router: Deleting temporary security group...
+    ==> router.amazon-ebs.router: Deleting temporary keypair...
+    Build 'router.amazon-ebs.router' finished after 10 minutes 48 seconds.
+
+    ==> Wait completed after 10 minutes 48 seconds
+
+    ==> Builds finished. The artifacts of successful builds are:
+    --> router.amazon-ebs.router: AMIs were created:
+    us-east-2: ami-0ebaf8746695b9726
+    ```
+
+    </details>
+
+    Record the resulting AMI identifier as a Terraform environment variable:
+
+    ```
+    $ export TF_VAR_router_ami_id="ami-0ebaf8746695b9726"
+    ```
+
+1.  **Build the "legacy" app image (without Tailscale client)**
+
+    ```shell
+    $ packer build -only=app.amazon-ebs.app \
+             -var 'aws_region=us-east-2' \
+             -var 'app_version=v1' \
+             -var 'install_tailscale=false' \
+             .
+    ```
+
+    <details>
+    <summary><strong>Example output</strong></summary>
+
+    ```text
+    app.amazon-ebs.app: output will be in this color.
+
+    ==> app.amazon-ebs.app: Prevalidating any provided VPC information
+    ==> app.amazon-ebs.app: Prevalidating AMI Name: tailscale-demo-app-v1-1793490396
+    ==> app.amazon-ebs.app: Found Image ID: ami-01d768183e68d1b82
+    ==> app.amazon-ebs.app: Creating temporary keypair: packer_6ae67ddc-8d59-7580-5f95-bd5221df1b83
+    ==> app.amazon-ebs.app: Creating temporary security group for this instance: packer_6ae67ddf-0c8d-c8ec-7aa8-5ee144270968
+    ==> app.amazon-ebs.app: Authorizing access to port 22 from [0.0.0.0/0] in the temporary security groups...
+    ==> app.amazon-ebs.app: Launching a source AWS instance...
+    ==> app.amazon-ebs.app: Instance ID: i-0734a5e20527174ce
+    ==> app.amazon-ebs.app: Waiting for instance (i-0734a5e20527174ce) to become ready...
+    ==> app.amazon-ebs.app: Using SSH communicator to connect: 18.189.17.34
+    ==> app.amazon-ebs.app: Waiting for SSH to become available...
+    ==> app.amazon-ebs.app: Connected to SSH!
+    ==> app.amazon-ebs.app: Provisioning with shell script: scripts/install-base.sh
+
+    ...
+
+    ==> app.amazon-ebs.app: Stopping the source instance...
+    ==> app.amazon-ebs.app: Stopping instance
+    ==> app.amazon-ebs.app: Waiting for the instance to stop...
+    ==> app.amazon-ebs.app: Creating AMI kYpOgR3 from instance i-0734a5e20527174ce
+    ==> app.amazon-ebs.app: Attaching run tags to AMI...
+    ==> app.amazon-ebs.app: AMI: ami-0ba1ff3071b12e6f5
+    ==> app.amazon-ebs.app: Waiting for AMI to become ready...
+    ==> app.amazon-ebs.app: Skipping Enable AMI deprecation...
+    ==> app.amazon-ebs.app: Skipping Enable AMI deregistration protection...
+    ==> app.amazon-ebs.app: Modifying attributes on AMI (ami-0d7eb057d1c4ce54e)...
+    ==> app.amazon-ebs.app: Modifying: description
+    ==> app.amazon-ebs.app: Modifying attributes on snapshot (snap-0d37a07761c1a24ed)...
+    ==> app.amazon-ebs.app: Adding tags to AMI (ami-0d7eb057d1c4ce54e)...
+    ==> app.amazon-ebs.app: Tagging snapshot: snap-0d37a07761c1a24ed
+    ==> app.amazon-ebs.app: Creating AMI tags
+    ==> app.amazon-ebs.app: Adding tag: "AppVersion": "v1"
+    ==> app.amazon-ebs.app: Adding tag: "Architecture": "arm64"
+    ==> app.amazon-ebs.app: Adding tag: "ManagedBy": "packer"
+    ==> app.amazon-ebs.app: Adding tag: "Name": "tailscale-demo-app"
+    ==> app.amazon-ebs.app: Adding tag: "Role": "app"
+    ==> app.amazon-ebs.app: Creating snapshot tags
+    ==> app.amazon-ebs.app: Deregistering the AMI and deleting unencrypted temporary AMIs and snapshots
+    ==> app.amazon-ebs.app: Terminating the source AWS instance...
+    ==> app.amazon-ebs.app: Cleaning up any extra volumes...
+    ==> app.amazon-ebs.app: No volumes to clean up, skipping
+    ==> app.amazon-ebs.app: Deleting temporary security group...
+    ==> app.amazon-ebs.app: Deleting temporary keypair...
+    Build 'app.amazon-ebs.app' finished after 10 minutes 13 seconds.
+
+    ==> Wait completed after 10 minutes 13 seconds
+
+    ==> Builds finished. The artifacts of successful builds are:
+    --> app.amazon-ebs.app: AMIs were created:
+    us-east-2: ami-0d7eb057d1c4ce54e
+    ```
+
+    </details>
+
+    Record the resulting AMI identifier as a Terraform environment variable:
+
+    ```
+    $ export TF_VAR_app_ami_id="ami-0d7eb057d1c4ce54e"
+    ```
+
+1.  **Build the "v2" app image (with Tailscale client)**
+
+    ```shell
+    $ packer build -only=app.amazon-ebs.app \
+             -var 'aws_region=us-east-2' \
+             -var 'app_version=v2' \
+             -var 'install_tailscale=true' \
+             .
+    ```
+
+    _NOTE: this image installs and enables Tailscale but does not enroll into the tailnet; enrollment occurs per instance at boot._
+
+    <details>
+    <summary><strong>Example output</strong></summary>
+
+    ```text
+app.amazon-ebs.app: output will be in this color.
+
+    ==> app.amazon-ebs.app: Prevalidating any provided VPC information
+    ==> app.amazon-ebs.app: Prevalidating AMI Name: tailscale-demo-app-v2-1793491039
+    ==> app.amazon-ebs.app: Found Image ID: ami-01d768183e68d1b82
+    ==> app.amazon-ebs.app: Creating temporary keypair: packer_6ae6805f-3512-0edf-f931-452cb9eafedb
+    ==> app.amazon-ebs.app: Creating temporary security group for this instance: packer_6ae68062-90fb-0919-c334-c6f13b0c872e
+    ==> app.amazon-ebs.app: Authorizing access to port 22 from [0.0.0.0/0] in the temporary security groups...
+    ==> app.amazon-ebs.app: Launching a source AWS instance...
+    ==> app.amazon-ebs.app: Instance ID: i-05acb466299f0ab60
+    ==> app.amazon-ebs.app: Waiting for instance (i-05acb466299f0ab60) to become ready...
+    ==> app.amazon-ebs.app: Using SSH communicator to connect: 3.21.171.17
+    ==> app.amazon-ebs.app: Waiting for SSH to become available...
+    ==> app.amazon-ebs.app: Connected to SSH!
+    ==> app.amazon-ebs.app: Provisioning with shell script: scripts/install-base.sh
+
+    ...
+
+    ==> app.amazon-ebs.app: Stopping the source instance...
+    ==> app.amazon-ebs.app: Stopping instance
+    ==> app.amazon-ebs.app: Waiting for the instance to stop...
+    ==> app.amazon-ebs.app: Creating AMI fCAE8X5 from instance i-05acb466299f0ab60
+    ==> app.amazon-ebs.app: Attaching run tags to AMI...
+    ==> app.amazon-ebs.app: AMI: ami-086b643c63c329a47
+    ==> app.amazon-ebs.app: Waiting for AMI to become ready...
+    ==> app.amazon-ebs.app: Copying/Encrypting AMI (ami-086b643c63c329a47) to other regions...
+    ==> app.amazon-ebs.app: Copying to: us-east-2
+    ==> app.amazon-ebs.app: Waiting for all copies to complete...
+    ==> app.amazon-ebs.app: Skipping Enable AMI deprecation...
+    ==> app.amazon-ebs.app: Skipping Enable AMI deregistration protection...
+    ==> app.amazon-ebs.app: Modifying attributes on AMI (ami-09665bb20bed029d1)...
+    ==> app.amazon-ebs.app: Modifying: description
+    ==> app.amazon-ebs.app: Modifying attributes on snapshot (snap-04bb0a6f531435abb)...
+    ==> app.amazon-ebs.app: Adding tags to AMI (ami-09665bb20bed029d1)...
+    ==> app.amazon-ebs.app: Tagging snapshot: snap-04bb0a6f531435abb
+    ==> app.amazon-ebs.app: Creating AMI tags
+    ==> app.amazon-ebs.app: Adding tag: "ManagedBy": "packer"
+    ==> app.amazon-ebs.app: Adding tag: "Name": "tailscale-demo-app"
+    ==> app.amazon-ebs.app: Adding tag: "Role": "app"
+    ==> app.amazon-ebs.app: Adding tag: "AppVersion": "v2"
+    ==> app.amazon-ebs.app: Adding tag: "Architecture": "arm64"
+    ==> app.amazon-ebs.app: Creating snapshot tags
+    ==> app.amazon-ebs.app: Deregistering the AMI and deleting unencrypted temporary AMIs and snapshots
+    ==> app.amazon-ebs.app: Terminating the source AWS instance...
+    ==> app.amazon-ebs.app: Cleaning up any extra volumes...
+    ==> app.amazon-ebs.app: No volumes to clean up, skipping
+    ==> app.amazon-ebs.app: Deleting temporary security group...
+    ==> app.amazon-ebs.app: Deleting temporary keypair...
+    Build 'app.amazon-ebs.app' finished after 9 minutes 43 seconds.
+
+    ==> Wait completed after 9 minutes 43 seconds
+
+    ==> Builds finished. The artifacts of successful builds are:
+    --> app.amazon-ebs.app: AMIs were created:
+    us-east-2: ami-09665bb20bed029d1
+    ```
+
+    </details>
+
+    Record the resulting AMI identifier as a Terraform environment variable:
+
+    ```
+    $ export TF_VAR_app_ami_id_v2="ami-09665bb20bed029d1"
+    ```
+
+1.  **Verify AWS AMI availability**
+
+    ```shell
+    $ aws ec2 describe-images \
+              --profile tailscale-demo \
+              --region us-east-2 \
+              --owners self \
+              --query 'Images[*].[ImageId,Name,State,CreationDate]' \
+              --output table
+    -----------------------------------------------------------------------------------------------------------
+    |                                             DescribeImages                                              |
+    +-----------------------+---------------------------------------+------------+----------------------------+
+    |  ami-0ebaf8746695b9726|  tailscale-demo-router-v1-1793489380  |  available |  2026-10-31T23:32:25.000Z  |
+    |  ami-0d7eb057d1c4ce54e|  tailscale-demo-app-v1-1793490396     |  available |  2026-10-31T23:50:14.000Z  |
+    |  ami-09665bb20bed029d1|  tailscale-demo-app-v2-1793491039     |  available |  2026-11-01T00:01:20.000Z  |
+    +-----------------------+---------------------------------------+------------+----------------------------+
+    ```
+
 ## Local development
 
 ### Demo App
@@ -243,7 +537,7 @@ This project contains a sample application that serves a simple static HTML webs
     Visit http://localhost:8080/ in your browser to view the sample app.
 
     Use `curl` to interact with the sample app API:
-    
+
     ```shell
     $ curl -s http://localhost:8080/api/ping
     pong
@@ -265,7 +559,7 @@ This project contains a sample application that serves a simple static HTML webs
     {"ready":true}
     ```
 
-    Toggle the app into an unready state via `POST /api/readyz` then `GET /api/readyz` to observe a `503 Service Unavailable` response code: 
+    Toggle the app into an unready state via `POST /api/readyz` then `GET /api/readyz` to observe a `503 Service Unavailable` response code:
 
     ```shell
     $ curl -i -X POST http://localhost:8080/api/readyz
@@ -374,7 +668,7 @@ The local images exercise the same provisioning steps that will later produce th
 
 1.  **Create a demo app** ✅
 
-    * simple go HTTP server 
+    * simple go HTTP server
     * static HTML server w/ embedded "hello world" content that displays host metadata (e.g. hostname or instance ID)
     * minimal HTTP/JSON api endpoints for demo (/api/healthz + /api/readyz)
 
@@ -391,7 +685,7 @@ The local images exercise the same provisioning steps that will later produce th
 
 4.  **Document AWS account prerequisites (manual)** ✅
 
-5.  **[Packer] build AMIs w/ custom app binary**
+5.  **[Packer] build AMIs w/ custom app binary** ✅
 
     * router (dedicated tailscale subnet router with no openssh)
     * app-v1 (no tailscale client)
@@ -415,16 +709,16 @@ The local images exercise the same provisioning steps that will later produce th
     3. demonstrate gradual deployment
        * edit terraform app AMI ID variable(s)
        * `terraform apply` (app v2 rollout w/ tailscale client)
-       * show app instances auto-registering in the tailscale console? 
+       * show app instances auto-registering in the tailscale console?
        * openssh access to app instances via tailnet addresses
     4. `terraform destroy`
 
 8.  **Stretch goals**
 
     * setup [AWS Outbound Identity Federation] w/ [Tailscale Trust Credentials] ✅
-    * add functional Valkey integration in the demo app? 
+    * add functional Valkey integration in the demo app?
     * add [`tsnet`] to the demo app?
-    * add AWS EKS w/ tailscale operator? 
+    * add AWS EKS w/ tailscale operator?
 
 <!-- Links -->
 ["gradual deployment"]: https://tailscale.com/docs/features/subnet-routers#benefits
@@ -458,3 +752,4 @@ The local images exercise the same provisioning steps that will later produce th
 [Tailscale Trust Credentials]: https://tailscale.com/docs/reference/trust-credentials
 [Terraform]: https://www.hashicorp.com/en/products/terraform
 [VPC]: https://docs.aws.amazon.com/vpc/latest/userguide/what-is-amazon-vpc.html
+[Install Packer]: https://developer.hashicorp.com/packer/install

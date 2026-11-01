@@ -2,15 +2,20 @@
 #
 # Local build (macOS/tart):
 #   packer build -only=router.tart-cli.router .
+#
+# AWS AMI build:
+#   packer build -only=router.amazon-ebs.router -var aws_region=us-east-2 .
 
 build {
   name = "router"
   sources = [
     "source.tart-cli.router",
+    "source.amazon-ebs.router",
   ]
 
   provisioner "shell" {
-    script = "scripts/install-base.sh"
+    script           = "scripts/install-base.sh"
+    environment_vars = ["INSTALL_TAILSCALE=true"]
   }
 
   provisioner "shell" {
@@ -52,8 +57,7 @@ build {
     ]
   }
 }
-
-# Local development base (MacOS/tart)
+# Local development base (macOS/tart)
 source "tart-cli" "router" {
   vm_base_name = "ghcr.io/cirruslabs/debian:latest"
   vm_name      = "tailscale-demo-router-local"
@@ -66,4 +70,39 @@ source "tart-cli" "router" {
   ssh_username = "admin"
   ssh_password = "admin"
   ssh_timeout  = "5m"
+}
+
+# Production base (AWS EBS)
+#
+# Debian publishes the current ARM64 release images in every commercial region
+# under this account. Selecting the newest image by this explicit owner and
+# release-family name avoids hard-coding a region-specific AMI ID.
+source "amazon-ebs" "router" {
+  region                 = var.aws_region
+  skip_region_validation = true
+  ssh_username           = var.aws_ssh_username
+  instance_type          = var.aws_instance_type
+
+  source_ami_filter {
+    filters = {
+      architecture        = "arm64"
+      name                = "debian-${var.debian_release}-arm64-*"
+      root-device-type    = "ebs"
+      virtualization-type = "hvm"
+    }
+    most_recent = true
+    owners      = ["136693071363"]
+  }
+
+  ami_name        = "tailscale-demo-router-${var.app_version}-{{timestamp}}"
+  ami_description = "Debian subnet-router base image for the Tailscale FDE demo"
+  encrypt_boot    = true
+
+  tags = {
+    Name         = "tailscale-demo-router"
+    Role         = "subnet-router"
+    Architecture = "arm64"
+    ManagedBy    = "packer"
+    AppVersion   = var.app_version
+  }
 }

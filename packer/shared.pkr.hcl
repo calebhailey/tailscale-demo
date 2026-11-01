@@ -35,6 +35,12 @@ variable "aws_region" {
   description = "AWS region for amazon-ebs builds."
 }
 
+variable "aws_profile" {
+  type        = string
+  default     = "tailscale-demo"
+  description = "AWS CLI profile used by the amazon-ebs builder."
+}
+
 variable "aws_ssh_username" {
   type        = string
   default     = "admin"

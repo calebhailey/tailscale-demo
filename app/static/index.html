@@ -2,8 +2,10 @@
 <html lang="en">
     <head>
         <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Demo server</title>
         <link rel='stylesheet' href='/css/styles.css'>
+        <script type="module" src="/js/count-down.js"></script>
     </head>
     <body>
         <header>
@@ -14,8 +16,36 @@
         <main>
             <section>
                 <h1>Hello, {{ or (get "user.metadata.name") "demo" }} world!</h1>
-                <p>This app is running on {{ .Environment.Hostname }} (<code>{{ .Environment.OS }}/{{ .Environment.Architecture }}</code>).</p>
-                <p>Status: {{ .Status.State }}</p>
+                <p>A load-balanced demo with Valkey-backed browser sessions.</p>
+                <dl>
+                    <dt>Application status</dt>
+                    <dd><code>{{ .Status.State }}</code></dd>
+
+                    <dt>Host platform</dt>
+                    <dd><code>{{ .Environment.Platform }}</code></dd>
+
+                    <dt>Host name</dt>
+                    <dd><code>{{ .Environment.Hostname }}</code></dd>
+
+                    <dt>Host architecture</dt>
+                    <dd><code>{{ .Environment.OS }}/{{ .Environment.Architecture }}</code></dd>
+
+                    <dt>Session ID</dt>
+                    <dd><code>{{ or (get "session.id") "unavailable" }}</code></dd>
+
+                    <dt>Session page loads</dt>
+                    <dd><code>{{ or (get "session.page_loads") "unavailable" }}</code></dd>
+
+                    <dt>Session expires in</dt>
+                    <dd>
+                        <code>
+                            {{ with (get "session.expires_at") }}<count-down until="{{ .Format "2006-01-02T15:04:05Z07:00" }}">{{ get "session.expires_in" }}</count-down>{{ else }}unavailable{{ end }}
+                        </code>
+                    </dd>
+
+                    <dt>Active sessions</dt>
+                    <dd><code>{{ or (get "session.active_visitors") "unavailable" }}</code></dd>
+                </dl>
             </section>
         </main>
         <footer>

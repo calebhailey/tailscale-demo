@@ -14,8 +14,11 @@ build {
   ]
 
   provisioner "shell" {
-    script           = "scripts/install-base.sh"
-    environment_vars = ["INSTALL_TAILSCALE=${var.install_tailscale}"]
+    script = "scripts/install-base.sh"
+    environment_vars = [
+      "INSTALL_AWSCLI=true",
+      "INSTALL_TAILSCALE=${var.install_tailscale}",
+    ]
   }
 
   provisioner "file" {
@@ -103,6 +106,7 @@ source "tart-cli" "app" {
 # Production (AWS EBS)
 source "amazon-ebs" "app" {
   region                 = var.aws_region
+  profile                = var.aws_profile
   skip_region_validation = true
   ssh_username           = var.aws_ssh_username
   instance_type          = var.aws_instance_type
@@ -120,7 +124,13 @@ source "amazon-ebs" "app" {
 
   ami_name        = "tailscale-demo-app-${var.app_version}-{{timestamp}}"
   ami_description = "Debian application base image for the Tailscale FDE demo"
-  encrypt_boot    = true
+
+  # Encrypt the builder's root EBS volume up front. Leaving encrypt_boot unset
+  # avoids Packer's otherwise redundant, same-region AMI copy/re-encryption.
+  launch_block_device_mappings {
+    device_name = "/dev/xvda"
+    encrypted   = true
+  }
 
   tags = {
     Name         = "tailscale-demo-app"

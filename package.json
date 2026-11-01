@@ -1,0 +1,11 @@
+{
+  "name": "tailscale-forward-deployed-engineer-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "render:network-topology": "node docs/scripts/render-network-topology.mjs"
+  },
+  "devDependencies": {
+    "pele": "^1.13.0"
+  }
+}

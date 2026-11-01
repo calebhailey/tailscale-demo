@@ -1,0 +1,17 @@
+# AWS Outbound Identity Federation (Tailscale Routers)
+tailscale_router_client_id = "xxxxxxxxxxxxxxxxx-xxxxxxxxxxxxxxxxx"
+tailscale_router_audience  = "api.tailscale.com/xxxxxxxxxxxxxxxxx-xxxxxxxxxxxxxxxxx"
+
+# AWS Outbound Identity Federation (Demo Apps)
+tailscale_app_client_id = "xxxxxxxxxxxxxxxxx-xxxxxxxxxxxxxxxxx"
+tailscale_app_audience  = "api.tailscale.com/xxxxxxxxxxxxxxxxx-xxxxxxxxxxxxxxxxx"
+
+# AWS EC2 AMI identifiers
+router_ami_id = "ami-xxxxxxxxxxxxxxxxx"
+app_ami_id    = "ami-xxxxxxxxxxxxxxxxx" # v1
+
+# Change to a new Unix-epoch value to deliberately roll the router ASG.
+router_version = "1793491200"
+
+# Conventional OpenSSH access to app instances
+ssh_public_key_path = "~/.ssh/tailscale-demo.pub"

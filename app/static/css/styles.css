@@ -56,11 +56,40 @@ footer div {
 
 :where(a) { color: inherit; }
 
+dl {
+    display: grid;
+    grid-template-columns: 10rem minmax(0, 1fr);
+    column-gap: var(--gutter-1x);
+    row-gap: var(--gutter-1x);
+    margin: var(--gutter-2x) 0;
+}
+
+dl dt { font-weight: 700; }
+dl dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
 svg { fill: currentColor; }
 
 @media screen and (max-width: 768px) {
     :root {
         --container-width: 90vw;
         --container-gutter: 5vw;
+        --whitespace: 32px;
+    }
+
+    h1 {
+        font-size: clamp(2rem, 9vw, 3rem);
+        line-height: 1.1;
+    }
+
+    dl {
+        grid-template-columns: 1fr;
+        row-gap: 0;
+    }
+
+    dl dd {
+        margin-bottom: var(--gutter-2x);
     }
 }

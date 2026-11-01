@@ -10,6 +10,10 @@ sudo apt-get install --yes --no-install-recommends \
      jq \
      openssh-server
 
+if [[ "${INSTALL_AWSCLI:-false}" == "true" ]]; then
+  sudo apt-get install --yes --no-install-recommends awscli
+fi
+
 if [[ "${INSTALL_TAILSCALE:-false}" == "true" ]]; then
   # Install but do not enroll Tailscale. A boot-time configuration script owns
   # enrollment so every EC2 instance receives a unique, short-lived identity.

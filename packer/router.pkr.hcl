@@ -79,6 +79,7 @@ source "tart-cli" "router" {
 # release-family name avoids hard-coding a region-specific AMI ID.
 source "amazon-ebs" "router" {
   region                 = var.aws_region
+  profile                = var.aws_profile
   skip_region_validation = true
   ssh_username           = var.aws_ssh_username
   instance_type          = var.aws_instance_type
@@ -96,7 +97,13 @@ source "amazon-ebs" "router" {
 
   ami_name        = "tailscale-demo-router-${var.app_version}-{{timestamp}}"
   ami_description = "Debian subnet-router base image for the Tailscale FDE demo"
-  encrypt_boot    = true
+
+  # Encrypt the builder's root EBS volume up front. Leaving encrypt_boot unset
+  # avoids Packer's otherwise redundant, same-region AMI copy/re-encryption.
+  launch_block_device_mappings {
+    device_name = "/dev/xvda"
+    encrypted   = true
+  }
 
   tags = {
     Name         = "tailscale-demo-router"

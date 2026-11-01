@@ -1,0 +1,11 @@
+.envrc
+.env/
+node_modules/
+dist/
+plan/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.pkrvars.hcl
+*.tfvars

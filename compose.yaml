@@ -12,12 +12,13 @@ services:
       retries: 3
       start_period: 15s
 
-  # demo app
   app:
     build:
       context: .
       dockerfile: containers/app.Containerfile
     command: ["--host", "0.0.0.0", "--port", "8080", "--data", "data.json"]
+    environment:
+      VALKEY_ADDR: valkey:6379
     volumes:
       - ./app/data.json:/app/data.json:ro
     restart: unless-stopped
@@ -35,6 +36,7 @@ services:
   valkey:
     image: docker.io/valkey/valkey:8-alpine
     command: ["valkey-server", "/etc/valkey/valkey.conf"]
+    ports: ["127.0.0.1:6379:6379"]
     volumes:
       - ./containers/valkey.conf:/etc/valkey/valkey.conf:ro
     healthcheck:

@@ -1,4 +1,4 @@
-# Tailscale Forward Deployed Engineer Demo
+# Tailscale Demo
 
 * [Overview](#overview)
 * [Demo](#demo)
@@ -20,9 +20,7 @@
 This demo highlights the value proposition of the Tailscale platform, specifically including [Tailscale Subnet Routers].
 The demo will focus on how Tailscale Subnet Routers facilitate ["gradual deployment"] of Tailscale in hybrid cloud infrastructures, as well as the ["managed services access"] use case.
 
-**Network topology**
-
-![Network topology showing public application access through the Application Load Balancer and private access through Tailscale subnet routers.](docs/img/network-topology.svg)
+![Tailscale demo AWS infrastructure and network topology diagram.](docs/img/aws-network-infrastructure.png)
 
 ## Demo
 
